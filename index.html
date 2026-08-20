@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>視覺化環境音量提示燈</title>
+    <style>
+        body { margin: 0; background-color: #111a14; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; overflow: hidden;}
+        #app-container { display: flex; gap: 20px; width: 95vw; max-width: 1200px; height: 600px; }
+        
+        /* === 左側：動畫主畫面 === */
+        #canvas-container { flex: 1.2; position: relative; border-radius: 20px; overflow: hidden; background-color: #16241a; transition: box-shadow 0.5s ease; }
+        canvas { width: 100%; height: 100%; display: block; }
+        .state-warning { box-shadow: inset 0 0 80px 20px rgba(255, 191, 0, 0.6) !important; }
+        .state-alert { box-shadow: inset 0 0 120px 40px rgba(255, 140, 0, 0.8) !important; }
+        #db-display { position: absolute; top: 20px; left: 20px; color: rgba(255,255,255,0.5); font-size: 14px; }
+        
+        /* === 右側：控制面板與獎勵系統 === */
+        #panel { flex: 1; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; padding-right: 10px;}
+        
+        /* 區塊共用底色 */
+        .card-box { background-color: #1a241c; padding: 25px; border-radius: 20px; border: 1px solid #2d3f32;}
+        h2 { margin: 0 0 5px 0; font-size: 18px; color: #f4f4f4; }
+        p { color: #88a38f; font-size: 13px; margin-top: 0; margin-bottom: 15px; line-height: 1.4; }
+        
+        /* 情境按鈕 */
+        .mode-list { display: flex; flex-direction: column; gap: 10px; }
+        .mode-btn { 
+            background: #1e2b21; border: 2px solid transparent; padding: 12px 18px; border-radius: 12px; 
+            cursor: pointer; display: flex; align-items: center; gap: 15px; transition: 0.2s; text-align: left;
+        }
+        .mode-btn.active { border-color: #6ee7b7; background: #1a2f22; }
+        
+        /* 狀態圓點 */
+        .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block;}
+        .dot.green { background: #6ee7b7; }
+        .dot.yellow { background: #fbbf24; }
+        .dot.orange { background: #f97316; }
+        .dot.purple { background: #a78bfa; }
+        .dot.brown { background: #b45309; }
+        
+        /* 按鈕文字 */
+        .title { font-weight: bold; font-size: 15px; margin-bottom: 2px; color: #d1d1d1; }
+        .mode-btn.active .title { color: #ffffff; }
+        .desc { color: #88a38f; font-size: 12px; }
+        
+        /* === 安靜獎勵進度 UI === */
+        .reward-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .fish-icons { display: flex; gap: 5px; }
+        .fish-icon { width: 20px; height: 12px; fill: #2d3f32; transition: fill 0.3s;}
+        .fish-icon.earned { fill: #6ee7b7; }
+        
+        /* 進度條 */
+        .progress-bg { background: #2d3f32; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+        .progress-fill { background: #6ee7b7; height: 100%; width: 0%; transition: width 0.1s linear; }
+        
+        /* 時間文字 */
+        .time-texts { display: flex; justify-content: space-between; font-size: 12px; color: #88a38f; margin-bottom: 20px; }
+        .time-texts .highlight { color: #6ee7b7; }
+        
+        /* 角色解鎖卡片 */
+        .char-cards { display: flex; gap: 10px; }
+        .char-card { flex: 1; background: #162018; border: 1px solid #2d3f32; border-radius: 12px; padding: 15px 0; text-align: center; color: #556b5a; transition: 0.3s; }
+        .char-card.unlocked { border-color: #4a6351; color: #d1d1d1; }
+        .char-card.active { border-color: #6ee7b7; color: white; background: #1a2f22; }
+        .char-card .dot { margin-bottom: 8px; }
+        .char-card .req { font-size: 10px; color: #556b5a; margin-top: 5px; }
+
+        #start-btn { padding: 15px; background: #6ee7b7; color: #111a14; border: none; border-radius: 10px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: auto; }
+    </style>
+</head>
+<body>
+
+<div id="app-container">
+    <!-- 左側動畫區塊 -->
+    <div id="canvas-container">
+        <div id="db-display">目前音量: 0 dB</div>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <!-- 右側控制面板 -->
+    <div id="panel">
+        
+        <!-- 安靜獎勵進度區塊 (完美還原您的截圖設計) -->
+        <div class="card-box">
+            <div class="reward-header">
+                <h2>安靜獎勵進度</h2>
+                <div class="fish-icons" id="fish-icons">
+                    <!-- 使用 SVG 繪製小魚干圖示 -->
+                    <svg class="fish-icon"><polygon points="15,6 20,2 20,10"/><ellipse cx="10" cy="6" rx="7" ry="4"/></svg>
+                    <svg class="fish-icon"><polygon points="15,6 20,2 20,10"/><ellipse cx="10" cy="6" rx="7" ry="4"/></svg>
+                    <svg class="fish-icon"><polygon points="15,6 20,2 20,10"/><ellipse cx="10" cy="6" rx="7" ry="4"/></svg>
+                    <svg class="fish-icon"><polygon points="15,6 20,2 20,10"/><ellipse cx="10" cy="6" rx="7" ry="4"/></svg>
+                    <svg class="fish-icon"><polygon points="15,6 20,2 20,10"/><ellipse cx="10" cy="6" rx="7" ry="4"/></svg>
+                </div>
+            </div>
+            <div class="progress-bg"><div class="progress-fill" id="progress-fill"></div></div>
+            <div class="time-texts">
+                <span id="time-elapsed">已安靜 0s</span>
+                <span id="time-remain" class="highlight">再 30s 獲得獎勵</span>
+            </div>
+
+            <!-- 角色解鎖卡片 -->
+            <div class="char-cards">
+                <div class="char-card active" id="card-cat">
+                    <div class="dot green"></div><br>小貓
+                </div>
+                <div class="char-card" id="card-owl">
+                    <div class="dot purple"></div><br>貓頭鷹
+                    <div class="req">需 5 枚</div>
+                </div>
+                <div class="char-card" id="card-bear">
+                    <div class="dot brown"></div><br>小熊
+                    <div class="req">需 10 枚</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 動態情境模式區塊 -->
+        <div class="card-box">
+            <h2>動態情境模式</h2>
+            <p>一鍵切換預設情境，閾值自動調整，依課型智慧切換。</p>
+            <div class="mode-list">
+                <button class="mode-btn active" data-warning="60" data-alert="75">
+                    <div class="dot green"></div>
+                    <div><div class="title">自習模式</div><div class="desc">極靜・保持專注</div></div>
+                </button>
+                <button class="mode-btn" data-warning="70" data-alert="85">
+                    <div class="dot yellow"></div>
+                    <div><div class="title">小組討論</div><div class="desc">中等・適度交流</div></div>
+                </button>
+                <button class="mode-btn" data-warning="80" data-alert="95">
+                    <div class="dot orange"></div>
+                    <div><div class="title">自由活動</div><div class="desc">寬鬆・輕鬆互動</div></div>
+                </button>
+            </div>
+        </div>
+
+        <button id="start-btn">啟動麥克風</button>
+    </div>
+</div>
+
+<script>
+    // === UI 綁定 ===
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const canvasContainer = document.getElementById('canvas-container');
+    const startBtn = document.getElementById('start-btn');
+    const modeBtns = document.querySelectorAll('.mode-btn');
+    
+    // 獎勵系統 UI
+    const progressFill = document.getElementById('progress-fill');
+    const timeElapsedTxt = document.getElementById('time-elapsed');
+    const timeRemainTxt = document.getElementById('time-remain');
+    const fishIconElements = document.querySelectorAll('.fish-icon');
+    const cardCat = document.getElementById('card-cat'); 
+    const cardOwl = document.getElementById('card-owl');
+    const cardBear = document.getElementById('card-bear');
+
+    let currentWarningDB = 60, currentAlertDB = 75, currentState = 'QUIET';
+    
+    // 動態變數
+    let waveAmplitude = 0; 
+    let waveTime = 0;
+    let currentChar = 'cat'; // 紀錄當前角色: cat, owl, bear
+
+    // 獎勵邏輯變數
+    const REWARD_GOAL_MS = 30000; 
+    let quietTimerMs = 0;
+    let lastTime = 0;
+    let totalFish = 0;
+    let fallingFishes = []; 
+
+    function resizeCanvas() { canvas.width = canvasContainer.clientWidth; canvas.height = canvasContainer.clientHeight; }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    modeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            modeBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentWarningDB = parseInt(btn.getAttribute('data-warning'));
+            currentAlertDB = parseInt(btn.getAttribute('data-alert'));
+        });
+    });
+
+    let audioContext, analyser, dataArray;
+    let dbHistory = [];
+    
+    startBtn.addEventListener('click', async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            const source = audioContext.createMediaStreamSource(stream);
+            source.connect(analyser);
+            analyser.fftSize = 512;
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+            
+            startBtn.style.display = "none";
+            lastTime = performance.now();
+            requestAnimationFrame(updateLoop);
+        } catch (err) {
+            alert('無法存取麥克風，請檢查權限。');
+        }
+    });
+
+    // 🌟 升級版：支援多角色的繪製函數
+    function drawCharacter(x, y, state, type) {
+        let bodyColor, strokeColor;
+        
+        // 根據角色決定顏色
+        if (type === 'cat') { bodyColor = '#4a7c59'; strokeColor = '#223829'; }
+        else if (type === 'owl') { bodyColor = '#6d597a'; strokeColor = '#2b2331'; } // 紫色調
+        else if (type === 'bear') { bodyColor = '#8c5a35'; strokeColor = '#3a2312'; } // 棕色調
+
+        ctx.fillStyle = bodyColor;
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 2;
+
+        // 1. 畫身體 (共通)
+        ctx.beginPath(); ctx.ellipse(x, y + 20, 50, 35, 0, 0, 2 * Math.PI); ctx.fill();
+
+        // 2. 畫耳朵/特徵 (根據角色變化)
+        if (type === 'cat') {
+            // 尖耳朵
+            ctx.beginPath(); ctx.moveTo(x-30, y-20); ctx.lineTo(x-15, y-45); ctx.lineTo(x, y-25); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(x+30, y-20); ctx.lineTo(x+15, y-45); ctx.lineTo(x, y-25); ctx.fill();
+        } else if (type === 'owl') {
+            // 貓頭鷹的羽毛冠
+            ctx.beginPath(); ctx.moveTo(x-25, y-25); ctx.lineTo(x-15, y-40); ctx.lineTo(x-5, y-30); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(x+25, y-25); ctx.lineTo(x+15, y-40); ctx.lineTo(x+5, y-30); ctx.fill();
+        } else if (type === 'bear') {
+            // 熊的圓耳朵
+            ctx.beginPath(); ctx.arc(x-25, y-30, 15, 0, 2*Math.PI); ctx.fill();
+            ctx.beginPath(); ctx.arc(x+25, y-30, 15, 0, 2*Math.PI); ctx.fill();
+        }
+
+        // 3. 畫頭部 (共通)
+        ctx.beginPath(); ctx.arc(x, y - 10, 35, 0, 2 * Math.PI); ctx.fill();
+
+        // 4. 畫眼睛與表情 (共通)
+        ctx.fillStyle = 'white';
+        if (state === 'QUIET') {
+            ctx.beginPath(); ctx.arc(x-12, y-12, 8, 0.1*Math.PI, 0.9*Math.PI); ctx.stroke();
+            ctx.beginPath(); ctx.arc(x+12, y-12, 8, 0.1*Math.PI, 0.9*Math.PI); ctx.stroke();
+        } else if (state === 'WARNING') {
+            ctx.beginPath(); ctx.arc(x-12, y-10, 5, 0, 2*Math.PI); ctx.fill();
+            ctx.beginPath(); ctx.arc(x+12, y-12, 8, 0.1*Math.PI, 0.9*Math.PI); ctx.stroke();
+        } else {
+            ctx.beginPath(); ctx.arc(x-12, y-10, 7, 0, 2*Math.PI); ctx.fill();
+            ctx.beginPath(); ctx.arc(x+12, y-10, 7, 0, 2*Math.PI); ctx.fill();
+        }
+
+        // 5. 畫嘴巴/鼻子 (根據角色變化)
+        if (type === 'owl') {
+            // 黃色鳥喙
+            ctx.fillStyle = '#fbbf24';
+            ctx.beginPath(); ctx.moveTo(x-5, y); ctx.lineTo(x+5, y); ctx.lineTo(x, y+8); ctx.fill();
+        } else if (type === 'bear') {
+            // 熊的淺色口鼻
+            ctx.fillStyle = '#e6c29f';
+            ctx.beginPath(); ctx.ellipse(x, y+5, 12, 8, 0, 0, 2*Math.PI); ctx.fill();
+            ctx.fillStyle = strokeColor;
+            ctx.beginPath(); ctx.arc(x, y+2, 3, 0, 2*Math.PI); ctx.fill(); // 小黑鼻
+        }
+    }
+
+    function drawFallingFishes() {
+        ctx.fillStyle = '#6ee7b7'; 
+        for (let i = fallingFishes.length - 1; i >= 0; i--) {
+            let f = fallingFishes[i];
+            f.vy += 0.2; 
+            f.y += f.vy;
+            
+            ctx.beginPath();
+            ctx.ellipse(f.x, f.y, 10, 6, 0, 0, Math.PI*2); 
+            ctx.moveTo(f.x+8, f.y);
+            ctx.lineTo(f.x+16, f.y-6);
+            ctx.lineTo(f.x+16, f.y+6);
+            ctx.fill(); 
+
+            if (f.y > canvas.height + 50) fallingFishes.splice(i, 1);
+        }
+    }
+
+    function triggerReward() {
+        totalFish++;
+        fallingFishes.push({ x: canvas.width / 2 + (Math.random() * 100 - 50), y: -20, vy: -2 });
+
+        let currentDisplayFish = totalFish % 5;
+        if (currentDisplayFish === 0 && totalFish > 0) {
+            currentDisplayFish = 5; 
+        }
+
+        fishIconElements.forEach((icon, index) => {
+            if (index < currentDisplayFish) icon.classList.add('earned');
+            else icon.classList.remove('earned');
+        });
+
+        // 重置選取框
+        document.querySelectorAll('.char-card').forEach(c => c.classList.remove('active'));
+
+        // 🌟 角色解鎖與變身邏輯
+        if (totalFish >= 10) {
+            cardOwl.classList.add('unlocked');
+            cardBear.classList.add('unlocked', 'active');
+            currentChar = 'bear'; // 變身小熊！
+        } else if (totalFish >= 5) {
+            cardOwl.classList.add('unlocked', 'active');
+            currentChar = 'owl'; // 變身貓頭鷹！
+        } else {
+            cardCat.classList.add('active');
+            currentChar = 'cat'; 
+        }
+    }
+
+    function updateLoop(timestamp) {
+        let dt = timestamp - lastTime;
+        lastTime = timestamp;
+
+        analyser.getByteTimeDomainData(dataArray);
+        let sum = 0;
+        for(let i=0; i<dataArray.length; i++) sum += Math.pow((dataArray[i]-128)/128, 2);
+        let rms = Math.sqrt(sum / dataArray.length);
+        let currentDB = rms > 0 ? 20 * Math.log10(rms) + 100 : 0; 
+
+        dbHistory.push(currentDB);
+        if(dbHistory.length > 60) dbHistory.shift();
+        let avgDB = dbHistory.reduce((a,b)=>a+b,0) / dbHistory.length;
+        document.getElementById('db-display').innerText = `目前音量: ${avgDB.toFixed(1)} dB`;
+
+        currentState = 'QUIET';
+        if(avgDB >= currentAlertDB) currentState = 'ALERT';
+        else if(avgDB >= currentWarningDB) currentState = 'WARNING';
+
+        canvasContainer.className = (currentState === 'WARNING') ? 'state-warning' : (currentState === 'ALERT') ? 'state-alert' : '';
+
+        // === 安靜計時邏輯 ===
+        if (currentState === 'QUIET') {
+            quietTimerMs += dt;
+            if (quietTimerMs >= REWARD_GOAL_MS) { triggerReward(); quietTimerMs = 0; }
+        } else {
+            quietTimerMs = 0; 
+        }
+
+        let progressPct = (quietTimerMs / REWARD_GOAL_MS) * 100;
+        progressFill.style.width = `${progressPct}%`;
+        
+        let elapsedSec = Math.floor(quietTimerMs / 1000);
+        let remainSec = Math.ceil((REWARD_GOAL_MS - quietTimerMs) / 1000);
+        timeElapsedTxt.innerText = `已安靜 ${elapsedSec}s`;
+        
+        if (currentState === 'QUIET') {
+            timeRemainTxt.innerText = `再 ${remainSec}s 獲得獎勵`;
+            timeRemainTxt.className = 'highlight';
+        } else {
+            timeRemainTxt.innerText = `計時已中斷`;
+            timeRemainTxt.className = '';
+            timeRemainTxt.style.color = '#f97316'; 
+        }
+
+        // === 動態波浪 ===
+        let targetAmplitude = (currentState === 'QUIET') ? 2 : (currentState === 'WARNING') ? 15 : 40;
+        waveAmplitude += (targetAmplitude - waveAmplitude) * 0.05;
+        waveTime += (currentState === 'QUIET') ? 0.015 : 0.05;
+
+        // === 畫布渲染 ===
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = '#223829'; 
+        ctx.beginPath(); 
+        ctx.moveTo(0, canvas.height);
+        
+        let baseLakeHeight = canvas.height - 120; 
+        
+        for (let x = 0; x <= canvas.width; x += 15) {
+            let y = baseLakeHeight + 
+                    Math.sin(x * 0.005 + waveTime) * waveAmplitude + 
+                    Math.sin(x * 0.02 - waveTime * 1.2) * (waveAmplitude * 0.4);
+            ctx.lineTo(x, y);
+        }
+        ctx.lineTo(canvas.width, canvas.height);
+        ctx.fill();
+        
+        let charWaveOffset = Math.sin((canvas.width / 2) * 0.005 + waveTime) * waveAmplitude;
+        
+        // 畫出對應的角色
+        drawCharacter(canvas.width / 2, canvas.height / 2 + 10 + charWaveOffset, currentState, currentChar);
+        drawFallingFishes(); 
+
+        requestAnimationFrame(updateLoop);
+    }
+</script>
+</body>
+</html>
